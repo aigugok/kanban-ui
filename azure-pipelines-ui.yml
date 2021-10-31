@@ -1,0 +1,21 @@
+trigger:
+  branches:
+    include:
+    - master
+  paths:
+    exclude:
+    - README.md
+    - release-azure-pipelines-ui.yml
+
+resources:
+  repositories:
+  - repository: Templates
+    type: git
+    name: Templates
+
+variables:
+- group: Registry
+
+
+stages:
+- template: kanban-pushandbuild.yml@Templates

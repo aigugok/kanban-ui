@@ -1,0 +1,76 @@
+pipeline {
+    triggers {
+        upstream(threshold: hudson.model.Result.SUCCESS, upstreamProjects: "kanban-ui-build")
+    }
+    parameters {
+        extendedChoice(
+            name: 'VERSION',
+            description: 'Artifact version',
+            multiSelectDelimiter: ',',
+            visibleItemCount: 5,
+            quoteValue: false,
+            type: 'PT_SINGLE_SELECT',
+            /* Default Property Value Settings */
+            defaultPropertyFile: "/var/lib/jenkins/kanban_ui_versions",
+            defaultPropertyKey: 'last_v',
+            /* Values List Settings */
+            propertyFile: "/var/lib/jenkins/kanban_ui_versions",
+            propertyKey: "v"
+            )
+
+        choice(
+            choices: ['dev' , 'train'],
+            description: '',
+            name: 'ENVIRONMENT')
+    }
+    environment {
+        AZURE_CREDS = credentials('registry')
+    }
+    agent any
+
+    stages {
+        stage('Deploy to dev') {
+            when {
+                expression { params.ENVIRONMENT == 'dev' }
+            }
+            steps {
+                sh '''
+                ssh -o StrictHostKeyChecking=no jenkins@aa-dev.westeurope.cloudapp.azure.com  << EOF
+                 docker login academydevops.azurecr.io -u $AZURE_CREDS_USR -p $AZURE_CREDS_PSW
+                 docker stop frontend &> /dev/null
+                 docker rm frontend &> /dev/null
+                 docker network create kanban &> /dev/null
+                 docker run --network kanban -d --name frontend -p 4200:80 academydevops.azurecr.io/aa/kanban-ui:$VERSION
+                 exit
+                 EOF'''
+            }
+        }
+
+        stage('Deploy to train') {
+            when {
+                expression { params.ENVIRONMENT == 'train' }
+            }
+            steps {
+                sh '''
+                 ssh -o StrictHostKeyChecking=no jenkins@aa-train.westeurope.cloudapp.azure.com  << EOF 
+                 docker login academydevops.azurecr.io -u $AZURE_CREDS_USR -p $AZURE_CREDS_PSW
+                 docker stop frontend &> /dev/null
+                 docker rm frontend &> /dev/null
+                 docker network create kanban &> /dev/null
+                 docker run --network kanban -d --name frontend -p 4200:80 academydevops.azurecr.io/aa/kanban-ui:$VERSION
+                 exit
+                 EOF'''
+            }
+        }
+
+        stage('Healthcheck'){
+             steps {
+                 sh '''
+                 sleep 15s
+                 curl -s http://aa-$ENVIRONMENT.westeurope.cloudapp.azure.com:4200 | grep KanbanUi || exit 1
+                 '''
+            }
+        }
+        
+  }
+}

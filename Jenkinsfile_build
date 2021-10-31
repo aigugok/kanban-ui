@@ -1,0 +1,45 @@
+pipeline {
+  triggers {
+        pollSCM('* * * * *')
+    }
+  environment {
+    registry = "academydevops.azurecr.io/aa/kanban-ui"
+    registryCredential = 'registry'
+  }
+
+  agent any
+  
+  stages {
+    stage('Building image') {
+      steps{
+        script {
+           dockerImage =docker.build(registry + ":0.0.$BUILD_NUMBER", "--pull ./kanban-board/kanban-ui/") 
+        }
+      }
+    }
+     stage('Deploy Image') {
+      steps{
+        script {
+          docker.withRegistry( 'https://academydevops.azurecr.io/aa/kanban-ui', registryCredential ) {
+            dockerImage.push()
+          }
+        }
+      }
+    }
+    stage('Remove builded docker image') {
+      steps{
+        sh "docker rmi $registry:0.0.$BUILD_NUMBER"
+      }
+    }
+
+     stage('Version to file - kanban_app_versions'){
+            steps{
+                sh '''
+                v=$(head -n1 ~/kanban_ui_versions)
+                sed -i "s/$v/$v,0.0.$BUILD_NUMBER/" ~/kanban_ui_versions
+                sed -i "s/last_v=.*/last_v=0.0.$BUILD_NUMBER/" ~/kanban_ui_versions
+                '''
+            }
+        }
+  }
+}

@@ -1,0 +1,43 @@
+trigger:
+- none
+
+variables:
+- group: Registry
+- group: ACR
+- group: FRONTEND
+
+resources:
+  pipelines:
+  - pipeline: kanban-ui
+    source: /kanban-ui
+    trigger: 
+      branches:
+      - master
+  repositories:
+  - repository: Templates
+    type: git
+    name: Templates
+
+
+parameters:
+- name: env
+  displayName: Environment
+  type: string
+  default: dev
+  values:
+  - dev
+  - train
+  
+stages:
+- stage: Test
+  displayName: Build and restore
+  variables:
+  - ${{ if eq(parameters.env, 'train') }}:
+    - group: TRAIN
+  - ${{ if eq(parameters.env, 'dev') }}:
+    - group: DEV
+  jobs:
+  - template: kanban-deploy.yml@Templates
+    parameters:
+      env: ${{ parameters.env }}
+      version: $(resources.pipeline.kanban-ui.runName)
